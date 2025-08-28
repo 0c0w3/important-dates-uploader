@@ -17,7 +17,10 @@ import Papa from "papaparse";
 
 const queriesByLocale: Record<string, string[]> = {
   "en-us": ["", "when's ", "whens ", "when is "],
+  "en-uk": ["", "when's ", "whens ", "when is "],
   "de-de": ["", "wann ist "],
+  "it-it": ["", "quando è ", "Quando e ", "Quando cade ", "data "],
+  "fr-fr": ["", "quand est ", "C'est quand ", "Cest quand "],
 };
 
 interface DateInfo {
@@ -158,7 +161,7 @@ for (let path of files) {
   allYears.add(year);
 
   for (let line of lines) {
-    if (line.length < 4) throw new Error("Invalid CSV at " + path);
+    if (line.length < 3) throw new Error("Invalid CSV at " + path);
     let [dateStartStr, dateEndStr, name, kw] = line;
 
     let dateStart = new Date(dateStartStr + "Z");
@@ -166,7 +169,7 @@ for (let path of files) {
 
     let date = dateEnd ? [dateStart, dateEnd] : dateStart;
 
-    if (dateStart.getFullYear() != parseInt(year)) throw new Error();
+    if (dateStart.getFullYear() != parseInt(year)) throw new Error(line);
 
     if (name in dates) {
       let dateInfo = dates[name]!;
