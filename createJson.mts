@@ -47,6 +47,7 @@ import Papa from "papaparse";
 import { KintoClient } from "kinto";
 
 const DRY_RUN = false;
+// const DRY_RUN = true;
 
 const QUERIES_BY_LOCALE: Record<string, string[]> = {
   "en": ["", "when's ", "whens ", "when is ", "what day is "],
@@ -486,6 +487,7 @@ for (let [localeOrLang, suggestions] of suggestionsByLocale) {
     Buffer.from(JSON.stringify(suggestions)).toString("base64");
 
   console.debug("Uploading record:", record);
+  console.dir(suggestions, { depth: null });
 
   if (!DRY_RUN) {
     await collection.addAttachment(dataUri, record, {

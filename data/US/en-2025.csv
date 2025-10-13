@@ -1,5 +1,5 @@
 date,end-date,holiday-name,keywords
-1-Jan-25,,New Year's Day,New Year's Day|
+1-Jan-25,,New Year's Day,New Year's| Day
 20-Jan-25,,Martin Luther King Jr. Day,"Martin L|uther King Jr. Day, MLK| Jr. Day, MLK Day|"
 20-Jan-25,,Inauguration Day,Inaug|uration Day
 29-Jan-25,,Lunar New Year,"Lunar N|ew Year, spring fe|stival, chinese ne|w year"
@@ -15,14 +15,14 @@ date,end-date,holiday-name,keywords
 14-Apr-25,,Vaisakhi,Vaisa|khi
 15-Apr-25,,Tax Filing Deadline,"Tax Fi|ling Deadline, income tax d|eadline, tax d|ay"
 18-Apr-25,,Good Friday,Good Fr|iday
-20-Apr-25,,Easter Sunday,Easter Su|nday
-21-Apr-25,,Easter Monday,Easter Mo|nday
-5-May-25,,Cinco de Mayo,Cinco de| Mayo
+20-Apr-25,,Easter Sunday,Easter| Sunday
+21-Apr-25,,Easter Monday,Easter M|onday
+5-May-25,,Cinco de Mayo,Cinco d|e Mayo
 11-May-25,,Mother's Day,Mother's D|ay
 26-May-25,,Memorial Day,Memorial D|ay
 14-Jun-25,,Flag Day,Flag Da|y
 15-Jun-25,,Father's Day,Father's D|ay
-19-Jun-25,,Juneteenth,Junete|enth
+19-Jun-25,,Juneteenth,Junet|eenth
 4-Jul-25,,Independence Day,Independence D|ay
 1-Sep-25,,Labor Day,Labor D|ay
 22-Sep-25,24-Sep-25,Rosh Hashanah,Rosh H|ashanah
@@ -36,5 +36,5 @@ date,end-date,holiday-name,keywords
 28-Nov-25,,Black Friday,Black Fr|iday
 14-Dec-25,22-Dec-25,Hanukkah,"Hanuk|kah, chanuk|ah"
 24-Dec-25,,Christmas Eve,Christmas E|ve
-25-Dec-25,,Christmas Day,Christmas D|ay
-31-Dec-25,,New Year's Eve,"New Year's Eve|, nye|"
+25-Dec-25,,Christmas Day,Christmas| Day
+31-Dec-25,,New Year's Eve,"New Year's E|ve, nye|"
