@@ -1,25 +1,25 @@
-start-date,end-date,holiday-name,translated-holiday-name,keywords
-1-Jan-26,,New Year's Day,Jour de l'An,
-2-Feb-26,,Candlemas,Chandeleur,
-14-Feb-26,,Valentine’s Day,Saint-Valentin,
-17-Feb-26,,Mardi Gras,Mardi Gras,
-3-Apr-26,,Good Friday,Vendredi Saint,
-5-Apr-26,,Easter Sunday,Dimanche de Pâques,
-6-Apr-26,,Easter Monday,Lundi de Pâques,
-1-May-26,,Labor Day,Fête du Travail,
-8-May-26,,WWII Victory Day,Fête de la Victoire 1945,
-14-May-26,,Ascension Day,Ascension,
-24-May-26,,Whit Sunday,Dimanche de Pentecôte,
-25-May-26,,Whit Monday,Lundi de Pentecôte,
-31-May-26,,Mother's Day,Fête des Mères,
-21-Jun-26,,Father's Day,Fête des Pères,
-21-Jun-26,,Music Festival,Fête de la Musique,
-14-Jul-26,,Bastille Day,Fête nationale,
-15-Aug-26,,Assumption of Mary,Assomption de Marie,
-1-Nov-26,,All Saints' Day,Toussaint,
-11-Nov-26,,Armistice Day,Armistice 1918,
-6-Dec-26,,Saint Nicholas Day,Saint-Nicolas,
-24-Dec-26,,Christmas Eve,Réveillon de Noël,
-25-Dec-26,,Christmas Day,Noël,
-26-Dec-26,,St Stephen's Day,Saint-Étienne,
-31-Dec-26,,New Year's Eve,Réveillon du Nouvel An,
+start-date,end-date,holiday-name
+1-Jan-26,,Jour de l'An
+2-Feb-26,,Chandeleur
+14-Feb-26,,Saint-Valentin
+17-Feb-26,,Mardi Gras
+3-Apr-26,,Vendredi Saint
+5-Apr-26,,Dimanche de Pâques
+6-Apr-26,,Lundi de Pâques
+1-May-26,,Fête du Travail
+8-May-26,,Fête de la Victoire 1945
+14-May-26,,Ascension
+24-May-26,,Dimanche de Pentecôte
+25-May-26,,Lundi de Pentecôte
+31-May-26,,Fête des Mères
+21-Jun-26,,Fête des Pères
+21-Jun-26,,Fête de la Musique
+14-Jul-26,,Fête nationale
+15-Aug-26,,Assomption de Marie
+1-Nov-26,,Toussaint
+11-Nov-26,,Armistice 1918
+6-Dec-26,,Saint-Nicolas
+24-Dec-26,,Réveillon de Noël
+25-Dec-26,,Noël
+26-Dec-26,,Saint-Étienne
+31-Dec-26,,Réveillon du Nouvel An

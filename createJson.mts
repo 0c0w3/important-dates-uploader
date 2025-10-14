@@ -11,6 +11,9 @@
 // auth_token:
 //   Server auth token ("Bearer ...")
 
+// See also the `DRY_RUN` const below. When true, only the country is required
+// on the command line.
+
 // CSV files should be placed in per-country subdirectories inside the `data`
 // directory, one file per locale per year. For example:
 //
@@ -34,8 +37,8 @@
 // A given CSV file should contain dates for the country represented by its
 // parent directory for the language and year in its filename. In the example
 // above, US dates are provided for 2025 and 2026 in both English and Spanish
-// (as spoken in Mexico). German dates are provided for 2025 and 2026 in both
-// German and English.
+// (Mexico). German dates are provided for 2025 and 2026 in both German and
+// English.
 
 // To typecheck:
 //
@@ -70,18 +73,11 @@ const EXPANDED_LOCALES_BY_LANG: Record<string, string[]> = {
   en: ["en-CA", "en-GB", "en-US", "en-ZA"],
 };
 
-const CSV_COLUMNS_EN: Record<string, number> = {
+const CSV_COLUMNS: Record<string, number> = {
   DATE_START: 0,
   DATE_END: 1,
   NAME: 2,
   KEYWORDS: 3,
-};
-
-const CSV_COLUMNS_NON_EN: Record<string, number> = {
-  DATE_START: 0,
-  DATE_END: 1,
-  NAME: 3,
-  KEYWORDS: 4,
 };
 
 const RS_BUCKET = "main-workspace";
@@ -225,24 +221,27 @@ function logError(...args: any[]) {
 // Script starts here
 //
 
-if (process.argv.length != 5) {
+// Step 0: Process argv
+
+if (
+  (!DRY_RUN && process.argv.length != 5) ||
+  (DRY_RUN && (process.argv.length < 3 || 5 < process.argv.length))
+) {
   throw new Error("Missing options, see usage");
 }
 
 let country = process.argv[2]!;
 
-let serverName = process.argv[3]!;
-if (!RS_SERVER_URLS_BY_NAME.hasOwnProperty(serverName)) {
+let serverName = process.argv[3];
+if (serverName && !RS_SERVER_URLS_BY_NAME.hasOwnProperty(serverName)) {
   throw new Error("Unknown RS server " + serverName);
 }
 
 let authToken = process.argv[4]!;
 
 // Step 1: Parse CSVs into DateInfo objects
-// let dir = country + "/";
 let dir = path.join("data", country);
 let files = await readdir(dir);
-// files = files.filter(f => f.endsWith(".csv")).map(f => dir + f);
 files = files.filter(f => f.endsWith(".csv")).map(f => path.join(dir, f));
 
 let allYears: Set<string> = new Set();
@@ -279,15 +278,14 @@ for (let csvPath of files) {
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     let line = lines[lineIndex]!;
-    let colIndexes = locale.startsWith("en") ? CSV_COLUMNS_EN : CSV_COLUMNS_NON_EN;
-    if (line.length < Math.max(...Object.values(colIndexes))) {
+    if (line.length < Math.max(...Object.values(CSV_COLUMNS))) {
       throw new CsvError(filename, lineIndex, line);
     }
 
-    let dateStartStr = line[colIndexes.DATE_START!]!;
-    let dateEndStr = line[colIndexes.DATE_END!]!;
-    let name = line[colIndexes.NAME!]!;
-    let kw = line[colIndexes.KEYWORDS!]!;
+    let dateStartStr = line[CSV_COLUMNS.DATE_START!]!;
+    let dateEndStr = line[CSV_COLUMNS.DATE_END!]!;
+    let name = line[CSV_COLUMNS.NAME!]!;
+    let kw = line[CSV_COLUMNS.KEYWORDS!]!;
 
     let dateStart = new Date(dateStartStr + "Z");
     let dateEnd = dateEndStr ? new Date(dateEndStr + "Z") : null;
@@ -462,13 +460,17 @@ for (let [locale, suggestions] of suggestionsByLocale) {
 
 // Step 4: Upload
 
-let serverUrl = RS_SERVER_URLS_BY_NAME[serverName]!;
-let client = new KintoClient(serverUrl, {
-  headers: {
-    Authorization: authToken,
-  },
-});
-let collection = client.bucket(RS_BUCKET).collection(RS_COLLECTION);
+let client;
+let collection;
+if (serverName) {
+  let serverUrl = RS_SERVER_URLS_BY_NAME[serverName]!;
+  client = new KintoClient(serverUrl, {
+    headers: {
+      Authorization: authToken,
+    },
+  });
+  collection = client.bucket(RS_BUCKET).collection(RS_COLLECTION);
+}
 
 for (let [localeOrLang, suggestions] of suggestionsByLocale) {
   let locales = EXPANDED_LOCALES_BY_LANG[localeOrLang] ?? [localeOrLang];
@@ -486,12 +488,10 @@ for (let [localeOrLang, suggestions] of suggestionsByLocale) {
     "data:application/json;base64," +
     Buffer.from(JSON.stringify(suggestions)).toString("base64");
 
-  console.debug("Uploading record:", record);
-  console.dir(suggestions, { depth: null });
+  console.log("Uploading record:", record);
+//   console.dir(suggestions, { depth: null });
 
-  if (!DRY_RUN) {
-    await collection.addAttachment(dataUri, record, {
-      filename: `${id}.json`,
-    });
-  }
+  await collection?.addAttachment(dataUri, record, {
+    filename: `${id}.json`,
+  });
 }
