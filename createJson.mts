@@ -22,7 +22,7 @@
 //     | en-2025.csv
 //     | en-2026.csv
 //     | es-MX-2025.csv
-//     | ex-MX-2026.csv
+//     | es-MX-2026.csv
 //   | DE
 //     | de-2025.csv
 //     | de-2026.csv
@@ -89,25 +89,11 @@ const RS_SERVER_URLS_BY_NAME: Record<string, string> = {
   dev: "https://remote-settings-dev.allizom.org/v1/",
 };
 
-interface DateInfo {
+interface Event {
   name: string;
-  kw: string;
-  dates: { [year: string]: Date | Date[] };
-}
-
-function addKW(base: DateInfo, kw: string) {
-  if (!kw) {
-    return;
-  }
-  if (!base.kw) {
-    base.kw = kw;
-    return;
-  }
-  if (base.kw != kw) {
-    throw new Error(
-      `Tried to add keyword '${kw}' but there already is a keyword'${base.kw}'`
-    );
-  }
+  rawKeyword: string;
+  dates: (string | string[])[];
+  csvYears: Set<string>;
 }
 
 /**
@@ -157,13 +143,10 @@ function getDateStr(date: Date): string {
 
 type Keyword = string|[string, string[]];
 
-function generateKeywords(dateInfo: DateInfo, queries: string[]): Keyword[] {
-  if (!dateInfo.kw) {
-    throw new Error(dateInfo.name + " has no keywords");
-  }
-  let keywords = dateInfo.kw.split(",").map(kw => kw.toLowerCase().trim());
+function generateKeywords(event: Event, queries: string[]): Keyword[] {
+  let keywords = event.rawKeyword.split(",").map(kw => kw.toLowerCase().trim());
   if (keywords.some(kw => !kw.includes("|"))) {
-    throw new Error(dateInfo.name + " has a keyword without a |");
+    error("Event has a raw keyword without a '|'", event);
   }
 
   // Add versions without punctuation (preserve |) and dedupe.
@@ -204,17 +187,29 @@ function lcp(s1: string, s2: string): number {
   return Math.min(s1.length, s2.length);
 }
 
-let warningsLogged = false;
-let errorsLogged = false;
+/**
+ * @returns whether a date is in the past.
+ */
+function isPast(date: Date): boolean {
+  // Use a 24-hours-ago date as "now" to allow for time zone differences and a
+  // general fudge factor.
+  return date.getTime() < Date.now() - (24 * 60 * 60 * 1000);
+}
 
-function logWarning(...args: any[]) {
-  console.warn(...args);
+let warningsLogged = false;
+
+function info(...args: any[]) {
+  console.info("info:", ...args);
+}
+
+function warn(...args: any[]) {
+  console.warn("warn:", ...args);
   warningsLogged = true;
 }
 
-function logError(...args: any[]) {
-  console.error(...args);
-  errorsLogged = true;
+function error(...args: any[]): never {
+  console.warn("error:", ...args);
+  process.exit();
 }
 
 //
@@ -239,86 +234,157 @@ if (serverName && !RS_SERVER_URLS_BY_NAME.hasOwnProperty(serverName)) {
 
 let authToken = process.argv[4]!;
 
-// Step 1: Parse CSVs into DateInfo objects
+// Step 1: Parse CSVs into `Event` objects
+
 let dir = path.join("data", country);
 let files = await readdir(dir);
 files = files.filter(f => f.endsWith(".csv")).map(f => path.join(dir, f));
 
-let allYears: Set<string> = new Set();
-
-let dateInfosByNameByLocale: Map<string, Record<string, DateInfo>> = new Map();
-
-class CsvError extends Error {
-  constructor(filename: string, lineIndex: number, line: string[]) {
-    super([
-      "CSV Error:",
-      filename + ":" + (lineIndex + 1),
-      line.join(",")
-    ].join(" "));
-  }
-}
+let rawEventsByNameByLocale: Map<string, Map<string, Event>> = new Map();
+let allCsvYears: Set<string> = new Set();
 
 for (let csvPath of files) {
-  console.log(`Info: Parsing ${csvPath}`);
+  info(`Parsing ${csvPath}`);
 
   let filename = path.basename(csvPath);
   let match = filename.match(/^([a-z]{2,}(?:-[A-Z]{2})?)-(\d{4})\.csv$/);
   if (!match) {
-    throw new Error("Path does not match the expected format");
+    error("File name does not match the expected format", { filename });
+    process.exit();
   }
 
   let locale = match[1]!;
+  if (!QUERIES_BY_LOCALE[locale]) {
+    error("Unknown locale", { locale, filename });
+  }
+
   let year = match[2]!;
 
   let text = await readFile(csvPath, { encoding: "utf-8" });
   let lines = Papa.parse(text).data as [string, string, string, string][];
   lines.shift(); // Ignore header.
 
-  allYears.add(year);
+  allCsvYears.add(year);
+
+  let seenEventNames = new Set();
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     let line = lines[lineIndex]!;
     if (line.length < Math.max(...Object.values(CSV_COLUMNS))) {
-      throw new CsvError(filename, lineIndex, line);
+      error(`Line has too many columns`, { filename, lineIndex, line });
     }
 
-    let dateStartStr = line[CSV_COLUMNS.DATE_START!]!;
-    let dateEndStr = line[CSV_COLUMNS.DATE_END!]!;
-    let name = line[CSV_COLUMNS.NAME!]!;
-    let kw = line[CSV_COLUMNS.KEYWORDS!]!;
+    let rawDateStart = line[CSV_COLUMNS.DATE_START!]!;
+    let rawDateEnd = line[CSV_COLUMNS.DATE_END!]!;
+    let eventName = line[CSV_COLUMNS.NAME!]!;
+    let rawKeyword = line[CSV_COLUMNS.KEYWORDS!]!;
 
-    let dateStart = new Date(dateStartStr + "Z");
-    let dateEnd = dateEndStr ? new Date(dateEndStr + "Z") : null;
+    if (seenEventNames.has(eventName)) {
+      error(`"${eventName}" already defined in this file`, {
+        filename,
+        lineIndex,
+        line,
+      });
+    }
+    seenEventNames.add(eventName);
 
-    let date = dateEnd ? [dateStart, dateEnd] : dateStart;
+    let dateStart = new Date(rawDateStart + "Z");
+    let dateEnd = rawDateEnd ? new Date(rawDateEnd + "Z") : null;
 
     if (dateStart.getUTCFullYear() != parseInt(year)) {
-      throw new CsvError(filename, lineIndex, line);
+      error("Start date year doesn't match CSV file name", {
+        dateStart,
+        filename,
+        lineIndex,
+        line,
+      });
     }
 
-    let dateInfosByName = dateInfosByNameByLocale.get(locale);
-    if (!dateInfosByName) {
-      dateInfosByName = {};
-      dateInfosByNameByLocale.set(locale, dateInfosByName);
+    let eventsByName = rawEventsByNameByLocale.get(locale);
+    if (!eventsByName) {
+      eventsByName = new Map();
+      rawEventsByNameByLocale.set(locale, eventsByName);
     }
 
-    if (name in dateInfosByName) {
-      let dateInfo = dateInfosByName[name]!;
-      if (dateInfo.dates[year]) throw new Error();
-      dateInfo.dates[year] = date;
-      addKW(dateInfo, kw);
-    } else {
-      dateInfosByName[name] = {
-        name,
-        kw,
-        dates: { [year]: date },
+    let event = eventsByName.get(eventName);
+    if (!event) {
+      event = {
+        rawKeyword,
+        name: eventName,
+        dates: [],
+        csvYears: new Set(),
       };
+      eventsByName.set(eventName, event);
+    }
+
+    event.csvYears.add(year);
+
+    if (rawKeyword) {
+      if (!event.rawKeyword) {
+        event.rawKeyword = rawKeyword;
+      } else if (rawKeyword != event.rawKeyword) {
+        error("Event already has a different raw keyword", {
+          rawKeyword,
+          event,
+          filename,
+          lineIndex,
+          line,
+        });
+      }
+    }
+
+    if (!isPast(dateEnd ?? dateStart)) {
+      let startStr = getDateStr(dateStart);
+      let date = dateEnd ? [startStr, getDateStr(dateEnd)] : startStr;
+      event.dates.push(date);
+      event.dates.sort();
     }
   }
 }
 
-// Step 2: Build suggest JSON from collected DateInfo objects
-console.log();
+// Step 2: Sanity-check dates, discard dates in the past, build the final map
+
+let eventsByNameByLocale = new Map();
+
+for (let [locale, rawEventsByName] of rawEventsByNameByLocale) {
+  let eventsByName = new Map();
+  for (let [name, event] of rawEventsByName) {
+    if (!event.dates.length) {
+      warn("Event has no non-past dates:", { locale, event });
+    } else {
+      eventsByName.set(event.name, event);
+    }
+
+    if (event.dates.some(Array.isArray) && !event.dates.every(Array.isArray)) {
+      error("Event dates are sometimes a range and sometimes a single date", {
+        locale,
+        event,
+      });
+    }
+
+    let missingCsvYears = allCsvYears.symmetricDifference(event.csvYears);
+    if (missingCsvYears.size) {
+      // This is expected for some events like "Inauguration Day".
+      warn("Event is not present in all CSV years:", {
+        locale,
+        event,
+        missingCsvYears,
+      });
+    }
+  }
+
+  if (!eventsByName.size) {
+    warn("Locale has no non-past events:", { locale });
+  } else {
+    eventsByNameByLocale.set(locale, eventsByName);
+  }
+}
+
+if (!eventsByNameByLocale.size) {
+  error("No locale has non-past events, stopping");
+}
+
+// Step 3: Build JSON'able output from the events map
 
 interface SuggestionResultPayload {
   dates: (string | string[])[];
@@ -340,50 +406,39 @@ interface Suggestion {
 }
 
 let suggestionsByLocale: Map<string, Suggestion[]> = new Map();
-for (let [locale, dateInfosByName] of dateInfosByNameByLocale) {
+
+for (let [locale, eventsByName] of eventsByNameByLocale) {
   let suggestions = [];
-  let queries = QUERIES_BY_LOCALE[locale];
-  if (!queries) {
-    throw new Error("Locale not recognized: " + locale);
-  }
+  let queries = QUERIES_BY_LOCALE[locale]!;
 
-  for (let dateInfo of Object.values(dateInfosByName)) {
-    let sortedYears = Object.keys(dateInfo.dates).sort();
-    let dates = [];
+  let events: Event[] = eventsByName.values().toArray();
+  let sortedEvents = events.toSorted((a, b) => {
+    let aDate = a.dates[0]!;
+    let bDate = b.dates[0]!;
+    let aStart = Array.isArray(aDate) ? aDate[0]! : aDate;
+    let bStart = Array.isArray(bDate) ? bDate[0]! : bDate;
+    return aStart.localeCompare(bStart);
+  });
 
-    for (let year of sortedYears) {
-      let date = dateInfo.dates[year]!;
-
-      if (Array.isArray(date)) {
-        if (!date[0] || !date[1]) {
-          throw new Error();
-        }
-        dates.push([getDateStr(date[0]), getDateStr(date[1])]);
-      } else {
-        dates.push(getDateStr(date));
-      }
-    }
-
-    let keywords = generateKeywords(dateInfo, queries);
-
+  for (let event of sortedEvents) {
     suggestions.push({
       data: {
         result: {
           payload: {
-            dates,
-            name: dateInfo.name,
+            dates: event.dates,
+            name: event.name,
           },
         },
       },
-      keywords,
-      dismissal_key: dateInfo.name,
+      keywords: generateKeywords(event, queries),
+      dismissal_key: event.name,
     });
   }
 
   suggestionsByLocale.set(locale, suggestions);
 }
 
-// Step 3: Scan output for anomalies
+// Step 4: Scan the output for anomalies
 
 for (let [locale, suggestions] of suggestionsByLocale) {
   // All keywords as [prefix, suffix, suffixGroup].
@@ -395,25 +450,6 @@ for (let [locale, suggestions] of suggestionsByLocale) {
   for (let o of suggestions) {
     let payload = o.data.result.payload;
     let dates = payload.dates;
-
-    // Warn if an event doesn't happen every year.
-    // For some (e.g. inauguration day) this is expected.
-    let years = new Set(
-      dates.map(d => (Array.isArray(d) ? d[0]! : d).slice(0, 4))
-    );
-    let diff = allYears.symmetricDifference(years);
-    if (diff.size) {
-      logWarning(
-        `Warning: ${payload.name} does not exist in year ${diff.keys().toArray()}`
-      );
-    }
-
-    if (dates.some(Array.isArray) && !dates.every(Array.isArray)) {
-      logError(
-        `Warning: ${payload.name} sometimes is a date and sometimes is a range`
-      );
-    }
-
     for (let kw of o.keywords) {
       if (typeof kw == "string") {
         allKW.push([kw, "", suggestionID]);
@@ -428,7 +464,7 @@ for (let [locale, suggestions] of suggestionsByLocale) {
     suggestionID += 1;
   }
 
-  // This tries to find which queries would match multiple dates.
+  // This tries to find which queries would match multiple events.
   for (let i = 0; i < allKW.length; i++) {
     let [prefix1, suffix1, id1] = allKW[i]!;
     let kw1 = prefix1 + suffix1;
@@ -445,20 +481,19 @@ for (let [locale, suggestions] of suggestionsByLocale) {
       // needed to display each suggestion, both suggestions are displayed.
       let lcp_here = lcp(kw1, kw2);
       if (lcp_here >= Math.max(prefix1.length, prefix2.length)) {
-        logError(
-          `Warning: "${kw1.slice(0, lcp_here)}" ` +
-            `would match both "${kw1}" and "${kw2}"`
+        error(
+          `"${kw1.slice(0, lcp_here)}" would match both "${kw1}" and "${kw2}"`
         );
       }
     }
   }
-
-  if (errorsLogged) {
-    throw new Error("Errors logged, stopping");
-  }
 }
 
-// Step 4: Upload
+if (warningsLogged) {
+  warn("Warnings logged");
+}
+
+// Step 5: Upload
 
 let client;
 let collection;
@@ -488,7 +523,7 @@ for (let [localeOrLang, suggestions] of suggestionsByLocale) {
     "data:application/json;base64," +
     Buffer.from(JSON.stringify(suggestions)).toString("base64");
 
-  console.log("Uploading record:", record);
+  info("Uploading record:", record);
 //   console.dir(suggestions, { depth: null });
 
   await collection?.addAttachment(dataUri, record, {
